@@ -1,0 +1,186 @@
+﻿@using CrudEscuela.Shared.Student.Definition;
+@using CrudEscuela.Shared.Grade.Definition;
+@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.StudentGrade;
+@using CrudEscuela.Shared.Student;
+@using CrudEscuela.Shared.Grade;
+@using CrudEscuela.Shared.Utils;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<CreateStudentGrade> Logger;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+@attribute [Route(Routes.StudentGrade.CreateStudentGrade)]
+
+<h3>Crear grado de estudiante</h3>
+
+<EditForm Model="@request" OnValidSubmit="@CreateStudentGradeHandler" style="width: min(90%, 600px); margin: 0 auto 0 0;" class="p-3 border border-light">
+    <div class="form-control mb-3">
+        <InputText class="form-control" @bind-Value="request.Section" placeholder="Sección" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputSelect class="form-select" @bind-Value="request.GradeId" placeholder="Genero">
+            <option>Seleccione un grado</option>
+            @foreach ( var grade in Grades )
+            {
+                <option value="@grade.Id">@($"{grade.Name} - {grade.Professor.Name} {grade.Professor.LastName}")</option>
+            }
+        </InputSelect>
+    </div>
+
+    <div class="form-control mb-3">
+        <InputSelect class="form-select" @bind-Value="request.StudentId" placeholder="Genero">
+            <option>Seleccione un estudiante</option>
+            @foreach ( var student in Students )
+            {
+                <option value="@student.Id">@($"{student.Name} {student.LastName}")</option>
+            }
+        </InputSelect>
+    </div>
+
+    <button class="btn btn-primary">Crear grado de estudiante</button>
+</EditForm>
+
+@code {
+    private CreateStudentGradeRequest request = new CreateStudentGradeRequest();
+
+    private List<StudentDefinition> Students = new List<StudentDefinition>();
+    private List<GradeDefinition> Grades = new List<GradeDefinition>();
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/Student/getAll");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetAllStudentsResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                Students = content.Data.Students;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching all students");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar todos los estudiantes"
+                });
+        }
+
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/Grade/getAll");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetAllGradesResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                Grades = content.Data.Grades;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching all grades");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar todos los grados"
+                });
+        }
+    }
+
+    private async Task CreateStudentGradeHandler()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+
+            var response = await HttpClient.PostAsJsonAsync("api/StudentGrade/createStudentGrade", request);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<CreateStudentGradeResponse>>();
+
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                NavigationManager.NavigateTo(Routes.StudentGrade.StudentGradeList);
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = content.Message
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while creating student grade");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al crear grado de estudiante"
+                });
+        }
+    }
+}

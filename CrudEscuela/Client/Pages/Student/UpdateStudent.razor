@@ -1,0 +1,144 @@
+﻿@using CrudEscuela.Shared.Student.Definition;
+@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.Student;
+@using CrudEscuela.Shared.Utils;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<CreateStudent> Logger;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+@attribute [Route(Routes.Student.UpdateStudent)]
+
+<h3>Actualizar estudiante</h3>
+
+<EditForm Model="@request" OnValidSubmit="@UpdateStudentHandler" style="width: min(90%, 600px); margin: 0 auto 0 0;" class="p-3 border border-light">
+    <div class="form-control mb-3">
+        <InputText class="form-control" @bind-Value="request.Name" placeholder="Nombre" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputText class="form-control" @bind-Value="request.LastName" placeholder="Apellidos" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputDate class="form-control" @bind-Value="request.BirthDate" placeholder="Fecha de nacimiento" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputSelect class="form-select" @bind-Value="request.Genre" placeholder="Genero">
+            <option value="Male" selected>Hombre</option>
+            <option value="Female">Mujer</option>
+            <option value="Other">Otro</option>
+        </InputSelect>
+    </div>
+
+    <button class="btn btn-primary">Actualizar estudiante</button>
+</EditForm>
+
+@code {
+
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    private UpdateStudentRequest request = new UpdateStudentRequest();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+            var response = await HttpClient.GetAsync($"/api/Student/getStudent/{Id}");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetStudentResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                request.Id = content.Data.Student.Id;
+                request.Name = content.Data.Student.Name;
+                request.LastName = content.Data.Student.LastName;
+                request.BirthDate = content.Data.Student.BirthDate;
+                request.Genre = content.Data.Student.Genre.ToString();
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching student");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar estudiante"
+                });
+        }
+    }
+
+    private async Task UpdateStudentHandler()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+
+            var response = await HttpClient.PutAsJsonAsync("api/Student/updateStudent", request);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<UpdateStudentResponse>>();
+
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                NavigationManager.NavigateTo(Routes.Student.StudentList);
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = content.Message
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while updating students");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al actualizar estudiantes"
+                });
+        }
+    }
+}

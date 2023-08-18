@@ -1,0 +1,190 @@
+﻿@using CrudEscuela.Shared.StudentGrade.Definition;
+@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.StudentGrade;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<StudentGradeList> Logger;
+@inject HttpClient HttpClient;
+@attribute [Route(Routes.StudentGrade.StudentGradeList)]
+
+<h3>Lista de grados de estudiantes </h3>
+
+<a href="@Routes.StudentGrade.CreateStudentGrade" class="btn btn-primary mt-3 mb-3">Agregar nuevo grado estudiante</a>
+
+@if ( StudentGrades.Any() && !loading )
+{
+    <table class="table">
+        <thead class="thead-dark">
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">Sección</th>
+                <th scope="col">Estudiante</th>
+                <th scope="col">Grado</th>
+                <th scope="col">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ( var studentGrade in StudentGrades )
+            {
+                <tr>
+                    <th scope="row">@studentGrade.Id</th>
+                    <td>@studentGrade.Section</td>
+                    <td>@($"{studentGrade.Student.Name} {studentGrade.Student.LastName}")</td>
+                    <td>@($"{studentGrade.Grade.Name} {studentGrade.Grade.Professor.Name}")</td>
+                    <td>
+                        <span class="d-flex gap-1">
+
+                            <a href="@Routes.InjectId(Routes.StudentGrade.UpdateStudentGrade, studentGrade.Id.ToString())" class="btn btn-primary">
+                                <span class="oi oi-pencil" aria-hidden="true"></span>
+                            </a>
+
+                            <button class="btn btn-danger" @onclick="(async () => await DeleteStudentGradeHandler(studentGrade.Id))">
+                                <span class="oi oi-trash" aria-hidden="true"></span>
+                            </button>
+                        </span>
+                    </td>
+
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if ( !StudentGrades.Any() && loading )
+{
+    <p>Cargando grados de estudiantes</p>
+}
+else
+{
+    <p>Aún no hay grados de estudiantes registrados</p>
+}
+
+
+@code {
+    private bool loading = false;
+    private List<StudentGradeDefinition> StudentGrades = new List<StudentGradeDefinition>();
+
+    private async Task LoadStudentGrades()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/StudentGrade/getAll");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetAllStudentGradeResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                StudentGrades = content.Data.StudentGrades;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching all students grades");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar todos los grados de estudiantes"
+                });
+        }
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Fetching all students grades");
+        loading = true;
+        await LoadStudentGrades();
+        loading = false;
+    }
+
+    private async Task DeleteStudentGradeHandler(Guid studentGradeId)
+    {
+        Logger.LogInformation("Deleting student grade with id {StudentGradeId}", studentGradeId);
+
+        var result = await Sweet.FireAsync(new SweetAlertOptions
+            {
+                Title = "¿Esta seguro?",
+                Text = "El grado de estudiante será elminado permanentemente",
+                Icon = SweetAlertIcon.Warning,
+                ShowCancelButton = true,
+                ConfirmButtonText = "Si, eliminar",
+                CancelButtonText = "No, conservar"
+            });
+
+        if ( !result.IsConfirmed ) return;
+
+
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var request = new DeleteStudentGradeRequest { StudentGradeId = studentGradeId };
+            var requestMessage = new HttpRequestMessage(HttpMethod.Delete, "api/StudentGrade/deleteStudentGrade");
+            requestMessage.Content = JsonContent.Create(request);
+
+            var response = await HttpClient.SendAsync(requestMessage);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<DeleteStudentGradeResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                await LoadStudentGrades();
+                StateHasChanged();
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = $"Grado de estudiante de {content.Data.RemovedStudentGrade.Student.Name} eliminado correctament"
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while deleting student grade");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al eliminar grado estudiante"
+                });
+        }
+    }
+}

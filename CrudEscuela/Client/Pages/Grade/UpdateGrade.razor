@@ -1,0 +1,193 @@
+﻿@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.Grade;
+@using CrudEscuela.Shared.Professor;
+@using CrudEscuela.Shared.Professor.Definition;
+@using CrudEscuela.Shared.Utils;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<UpdateGrade> Logger;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+@attribute [Route(Routes.Grade.UpdateGrade)]
+
+<h3>Crear grado</h3>
+
+<EditForm Model="@request" OnValidSubmit="@UpdateGradeHandler" style="width: min(90%, 600px); margin: 0 auto 0 0;" class="p-3 border border-light">
+    <div class="form-control mb-3">
+        <InputText class="form-control" @bind-Value="request.Name" placeholder="Nombre" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputSelect @bind-Value="request.ProfessorId" class="form-select">
+            @foreach ( var professor in Professors )
+            {
+                <option value="@professor.Id">
+                    @(
+                        $"{professor.Name} {professor.LastName}"
+                        )
+                </option>
+            }
+        </InputSelect>
+    </div>
+
+    <button class="btn btn-primary">Actualizar grado</button>
+</EditForm>
+
+@code {
+
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    private UpdateGradeRequest request = new UpdateGradeRequest();
+    private List<ProfessorDefinition> Professors = new List<ProfessorDefinition>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfessors();
+
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+            var response = await HttpClient.GetAsync($"/api/Grade/getGrade/{Id}");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetGradeResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                request.Id = content.Data.Grade.Id;
+                request.Name = content.Data.Grade.Name;
+                request.ProfessorId = content.Data.Grade.Professor.Id;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching grade");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar grado"
+                });
+        }
+
+    }
+
+
+    private async Task LoadProfessors()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/Professor/getAll");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetAllProfessorsResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                Professors = content.Data.Professors;
+                var firstProfessor = content.Data.Professors.FirstOrDefault();
+                if ( firstProfessor != null )
+                    request.ProfessorId = firstProfessor.Id;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching all professors");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar todos los profesores"
+                });
+        }
+    }
+
+    private async Task UpdateGradeHandler()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+
+            var response = await HttpClient.PutAsJsonAsync("api/Grade/updateGrade", request);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<UpdateGradeResponse>>();
+
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                NavigationManager.NavigateTo(Routes.Grade.GradesList);
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = content.Message
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while updating grade");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = ex.Message
+                });
+        }
+    }
+}

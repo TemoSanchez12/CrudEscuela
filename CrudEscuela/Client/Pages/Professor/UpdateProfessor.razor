@@ -1,0 +1,139 @@
+﻿@using CrudEscuela.Shared.Professor.Definition;
+@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.Professor;
+@using CrudEscuela.Shared.Utils;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<UpdateProfessor> Logger;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+@attribute [Route(Routes.Professor.UpdateProfessor)]
+
+<h3>Actualizar profesor</h3>
+
+<EditForm Model="@request" OnValidSubmit="@UpdateProfessorHandler" style="width: min(90%, 600px); margin: 0 auto 0 0;" class="p-3 border border-light">
+    <div class="form-control mb-3">
+        <InputText class="form-control" @bind-Value="request.Name" placeholder="Nombre" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputText class="form-control" @bind-Value="request.LastName" placeholder="Apellidos" />
+    </div>
+
+    <div class="form-control mb-3">
+        <InputSelect class="form-select" @bind-Value="request.Genre" placeholder="Genero">
+            <option value="Male" selected>Hombre</option>
+            <option value="Female">Mujer</option>
+            <option value="Other">Otro</option>
+        </InputSelect>
+    </div>
+
+    <button class="btn btn-primary">Actualizar profesor</button>
+</EditForm>
+
+@code {
+
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    private UpdateProfessorRequest request = new UpdateProfessorRequest();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+            var response = await HttpClient.GetAsync($"/api/Professor/getProfessor/{Id}");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetProfessorResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                request.Id = content.Data.Professor.Id;
+                request.Name = content.Data.Professor.Name;
+                request.LastName = content.Data.Professor.LastName;
+                request.Genre = content.Data.Professor.Genre.ToString();
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching professor");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar profesor"
+                });
+        }
+    }
+
+    private async Task UpdateProfessorHandler()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+        try
+        {
+
+            var response = await HttpClient.PutAsJsonAsync("api/Professor/updateProfessor", request);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<UpdateProfessorResponse>>();
+
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                NavigationManager.NavigateTo(Routes.Professor.ProfessorList);
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = content.Message
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while updating professor");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al actualizar profesor"
+                });
+        }
+    }
+}

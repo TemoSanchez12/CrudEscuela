@@ -1,0 +1,193 @@
+﻿@using CrudEscuela.Shared.Grade.Definition;
+@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.Professor;
+@using CrudEscuela.Shared.Grade;
+@using CrudEscuela.Shared.Utils;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<GradeList> Logger;
+@inject HttpClient HttpClient;
+
+@attribute [Route(Routes.Grade.GradesList)]
+
+<h3>Lista de grados</h3>
+
+<a href="@Routes.Grade.CreateGrade" class="btn btn-primary mt-3 mb-3">Agregar nuevo grado</a>
+
+
+@if ( Grades.Any() && !loading )
+{
+    <table class="table">
+        <thead class="thead-dark">
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">Nombre</th>
+                <th scope="col">Nombre del Profesor</th>
+                <th scope="col">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ( var grade in Grades )
+            {
+                <tr>
+                    <th scope="row">@grade.Id</th>
+                    <td>@grade.Name</td>
+                    <td>@grade.Professor.Name</td>
+                    <td>
+                        <span class="d-flex gap-1">
+
+                            <a href="@Routes.InjectId(Routes.Grade.UpdateGrade, grade.Id.ToString())" class="btn btn-primary">
+                                <span class="oi oi-pencil" aria-hidden="true"></span>
+                            </a>
+
+                            <button class="btn btn-danger" @onclick="(async () => await DeleteGradeHandler(grade.Id))">
+                                <span class="oi oi-trash" aria-hidden="true"></span>
+                            </button>
+                        </span>
+                    </td>
+
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if ( !Grades.Any() && loading )
+{
+    <p>Cargando grados</p>
+}
+else
+{
+    <p>Aún no hay grados registrados</p>
+}
+
+
+@code {
+    private bool loading = false;
+    private List<GradeDefinition> Grades = new List<GradeDefinition>();
+
+    private async Task LoadGrades()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/Grade/getAll");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetAllGradesResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                Grades = content.Data.Grades;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching all grades");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar todos los grados"
+                });
+        }
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Fetching all grades");
+        loading = true;
+        await LoadGrades();
+        loading = false;
+    }
+
+    private async Task DeleteGradeHandler(Guid gradeId)
+    {
+        Logger.LogInformation("Deleting grade with id {GradeId}", gradeId);
+
+        var result = await Sweet.FireAsync(new SweetAlertOptions
+            {
+                Title = "¿Esta seguro?",
+                Text = "El grado será elminado permanentemente",
+                Icon = SweetAlertIcon.Warning,
+                ShowCancelButton = true,
+                ConfirmButtonText = "Si, eliminar",
+                CancelButtonText = "No, conservar"
+            });
+
+        if ( !result.IsConfirmed ) return;
+
+
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var request = new DeleteGradeRequest { GradeId = gradeId };
+            var requestMessage = new HttpRequestMessage(HttpMethod.Delete, "api/Grade/deleteGrade");
+            requestMessage.Content = JsonContent.Create(request);
+
+            var response = await HttpClient.SendAsync(requestMessage);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<DeleteGradeResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                await LoadGrades();
+                StateHasChanged();
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = $"Grado {content.Data.Grade.Name} eliminado correctament"
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while deleting grade");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al eliminar grade"
+                });
+        }
+    }
+}
+

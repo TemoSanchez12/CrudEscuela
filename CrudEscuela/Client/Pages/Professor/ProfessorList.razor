@@ -1,0 +1,194 @@
+﻿@using CrudEscuela.Shared.Professor.Definition;
+@using CrudEscuela.Shared;
+@using CrudEscuela.Shared.Professor;
+@using CrudEscuela.Shared.Utils;
+
+@inject SweetAlertService Sweet;
+@inject ILogger<ProfessorList> Logger;
+@inject HttpClient HttpClient;
+
+@attribute [Route(Routes.Professor.ProfessorList)]
+
+<h3>Lista de profesores</h3>
+
+<a href="@Routes.Professor.CreateProfessor" class="btn btn-primary mt-3 mb-3">Agregar nuevo profesor</a>
+
+
+@if ( Professors.Any() && !loading )
+{
+    <table class="table">
+        <thead class="thead-dark">
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">Nombre</th>
+                <th scope="col">Apellidos</th>
+                <th scope="col">Género</th>
+                <th scope="col">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ( var professor in Professors )
+            {
+                <tr>
+                    <th scope="row">@professor.Id</th>
+                    <td>@professor.Name</td>
+                    <td>@professor.LastName</td>
+                    <td>@professor.Genre.ToString()</td>
+                    <td>
+                        <span class="d-flex gap-1">
+
+                            <a href="@Routes.InjectId(Routes.Professor.UpdateProfessor, professor.Id.ToString())" class="btn btn-primary">
+                                <span class="oi oi-pencil" aria-hidden="true"></span>
+                            </a>
+
+                            <button class="btn btn-danger" @onclick="(async () => await DeleteProfessorHandler(professor.Id))">
+                                <span class="oi oi-trash" aria-hidden="true"></span>
+                            </button>
+                        </span>
+                    </td>
+
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if ( !Professors.Any() && loading )
+{
+    <p>Cargando profesores</p>
+}
+else
+{
+    <p>Aún no hay profesores registrados</p>
+}
+
+
+@code {
+    private bool loading = false;
+    private List<ProfessorDefinition> Professors = new List<ProfessorDefinition>();
+
+    private async Task LoadProfessors()
+    {
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/Professor/getAll");
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<GetAllProfessorsResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                Professors = content.Data.Professors;
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while fetching all professors");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al soliciar todos los profesores"
+                });
+        }
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Fetching all professors");
+        loading = true;
+        await LoadProfessors();
+        loading = false;
+    }
+
+    private async Task DeleteProfessorHandler(Guid professorId)
+    {
+        Logger.LogInformation("Deleting professor with id {ProfessorId}", professorId);
+
+        var result = await Sweet.FireAsync(new SweetAlertOptions
+            {
+                Title = "¿Esta seguro?",
+                Text = "El profesor será elminado permanentemente",
+                Icon = SweetAlertIcon.Warning,
+                ShowCancelButton = true,
+                ConfirmButtonText = "Si, eliminar",
+                CancelButtonText = "No, conservar"
+            });
+
+        if ( !result.IsConfirmed ) return;
+
+
+        var toast = Sweet.Mixin(new SweetAlertOptions
+            {
+                Toast = true,
+                TimerProgressBar = true,
+                Position = "top-end",
+                ShowConfirmButton = false,
+                Timer = 3000,
+            });
+
+        try
+        {
+            var request = new DeleteProfessorRequest { ProfesssorId = professorId };
+            var requestMessage = new HttpRequestMessage(HttpMethod.Delete, "api/Professor/deleteProfessor");
+            requestMessage.Content = JsonContent.Create(request);
+
+            var response = await HttpClient.SendAsync(requestMessage);
+            var content = await response.Content.ReadFromJsonAsync<ServiceResponse<DeleteProfessorResponse>>();
+
+            if ( content == null )
+                throw new Exception();
+
+
+            if ( content.Success && content.Data != null )
+            {
+                await LoadProfessors();
+                StateHasChanged();
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "success",
+                        Title = $"Profesor {content.Data.ProfessorRemoved.Name} eliminado correctament"
+                    });
+
+            }
+            else if ( !content.Success )
+            {
+                await toast.FireAsync(new SweetAlertOptions
+                    {
+                        Icon = "error",
+                        Title = content.Message
+                    });
+            }
+
+        }
+        catch ( Exception ex )
+        {
+            Logger.LogError(ex, "Something went wrong while deleting professor");
+            await toast.FireAsync(new SweetAlertOptions
+                {
+                    Icon = "error",
+                    Title = "Algo ha salido mal al eliminar profesor"
+                });
+        }
+    }
+}
+
